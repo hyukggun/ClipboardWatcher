@@ -3,66 +3,57 @@
   import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
   import { listen } from "@tauri-apps/api/event";
   import { onMount } from "svelte";
+  import ClipboardEvent from "../model/clipboard_event";
+  import ClipboardEventTable from "../lib/components/table/ClipboardEventTable.svelte";
 
-  let name = $state("");
-  let greetMsg = $state("");
   let clipboardText = $state("");
-
   let unlisten;
+
+  let clipboardEvents: ClipboardEvent[] = $state([]);
+  let texts: string[] = $state([]);
 
   onMount(async () => {
     unlisten = await listen('clipboard-changed', (event) => {
       console.log('clipboard-changed', event);
-      clipboardText = event.payload.text;
+      // clipboardText = event.payload.text;
+      // timestamp = event.payload.timestamp;
+      // clipboardEvents.push(event.payload);
+      // texts.push(event.payload.text);
+      clipboardEvents.push(new ClipboardEvent(event.payload.text, event.payload.timestamp));
     });
+    await invoke("load_clipboard_events_at_startup");
   });
 
   async function fetchClipboardText() {
     clipboardText = await invoke("get_clipboard_text");
   }
 
-  async function greet(event: Event) {
-    event.preventDefault();
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsg = await invoke("greet", { name });
+  async function resetClipboardEvents() {
+    clipboardEvents = [];
+    await invoke("clear_clipboard_history");
   }
 
-  function reset() {
-    name = "";
-    greetMsg = "";
-  }
-
-  async function openHelloWindow() {
-    const webview = new WebviewWindow("hello", {
-      url: "/hello",
-      title: "Hello World",
-      width: 400,
-      height: 300,
-      center: true,
-      resizable: true,
-      decorations: true,
-    });
-
-    webview.once("tauri://created", () => {
-      console.log("Hello World window created");
-    });
-
-    webview.once("tauri://error", (e: unknown) => {
-      console.error("Error creating Hello World window:", e);
-    });
+  async function handleCloseWindow() {
+    try {
+      await invoke("hide_window");
+    } catch (error) {
+      console.error("Failed to hide window:", error);
+    }
   }
 </script>
 
 <main class="container">
-  <h2>Clipboard</h2>
-  <div class="row">
-    <button onclick={fetchClipboardText}>Get Clipboard Text</button>
+  <div class="header">
+    <h2>Clipboard</h2>
+    <button class="close-button" onclick={handleCloseWindow} title="Close window">
+      ✕
+    </button>
   </div>
-  {#if clipboardText.length > 0}
-    <div class="clipboard-content">
-      <pre>{clipboardText}</pre>
-    </div>
-  {/if}
+  <div>
+    <button onclick={resetClipboardEvents}>Reset Clipboard Events</button>
+  </div>
+
+  <ClipboardEventTable events={clipboardEvents} />
 </main>
 
 <style>
@@ -97,6 +88,43 @@
   flex-direction: column;
   justify-content: center;
   text-align: center;
+}
+
+.header {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  margin-bottom: 1rem;
+}
+
+.header h2 {
+  margin: 0;
+}
+
+.close-button {
+  position: absolute;
+  right: 20px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  border-radius: 50%;
+  background-color: #f0f0f0;
+  color: #666;
+  transition: all 0.2s ease;
+}
+
+.close-button:hover {
+  background-color: #ff5555;
+  color: white;
+  border-color: #ff5555;
 }
 
 .logo {
@@ -164,24 +192,6 @@ button {
   margin-right: 5px;
 }
 
-.clipboard-content {
-  margin-top: 1em;
-  padding: 1em;
-  background-color: #e8e8e8;
-  border-radius: 8px;
-  max-width: 80%;
-  margin-left: auto;
-  margin-right: auto;
-  text-align: left;
-  overflow-x: auto;
-}
-
-.clipboard-content pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
 @media (prefers-color-scheme: dark) {
   :root {
     color: #f6f6f6;
@@ -201,8 +211,14 @@ button {
     background-color: #0f0f0f69;
   }
 
-  .clipboard-content {
-    background-color: #1f1f1f;
+  .close-button {
+    background-color: #3f3f3f;
+    color: #ccc;
+  }
+
+  .close-button:hover {
+    background-color: #ff5555;
+    color: white;
   }
 }
 

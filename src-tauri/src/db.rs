@@ -1,7 +1,8 @@
 use rusqlite::{Connection, Result};
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+use crate::model::ClipboardEvent;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClipboardEntry {
@@ -44,29 +45,27 @@ impl ClipboardDatabase {
     }
 
     /// Saves a clipboard entry to the database
-    pub fn save_entry(&self, content: String) -> Result<i64> {
-        let now = Utc::now().to_rfc3339();
-
+    pub fn save_entry(&self, clipboardEvent: ClipboardEvent) -> Result<i64> {
         self.conn.execute(
             "INSERT INTO clipboard_history (content, created_at) VALUES (?1, ?2)",
-            [&content, &now],
+            [&clipboardEvent.text(), &clipboardEvent.timestamp().to_string().as_str()],
         )?;
 
         Ok(self.conn.last_insert_rowid())
     }
 
     /// Retrieves all clipboard entries, sorted by most recent first
-    pub fn get_all_entries(&self) -> Result<Vec<ClipboardEntry>> {
+    pub fn get_all_entries(&self) -> Result<Vec<ClipboardEvent>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, content, created_at FROM clipboard_history ORDER BY created_at DESC"
         )?;
 
         let entries = stmt.query_map([], |row| {
-            Ok(ClipboardEntry {
-                id: Some(row.get(0)?),
+            Ok(ClipboardEvent::from_entry(ClipboardEntry {
+                id: None,
                 content: row.get(1)?,
                 created_at: row.get(2)?,
-            })
+            }))
         })?;
 
         entries.collect()
