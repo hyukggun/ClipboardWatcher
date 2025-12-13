@@ -2,13 +2,38 @@ use rusqlite::{Connection, Result};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use crate::model::ClipboardEvent;
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum ContentType {
+    Text,
+    Image,
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClipboardEntry {
-    pub id: Option<i64>,
-    pub content: String,
+    pub content_type: ContentType,
+    pub image_path: Option<String>,
+    pub text_content: Option<String>,
     pub created_at: String,
+}
+
+impl ClipboardEntry {
+    pub fn new_text_entry(text: String) -> Self {
+        Self {
+            content_type: ContentType::Text,
+            text_content: Some(text),
+            image_path: None,
+            created_at: chrono::Utc::now().to_string(),
+        }
+    }
+
+    pub fn new_image_entry(image_path: String) -> Self {
+        Self {
+            content_type: ContentType::Image,
+            image_path: Some(image_path),
+            text_content: None,
+            created_at: chrono::Utc::now().to_string(),
+        }
+    }
 }
 
 pub struct ClipboardDatabase {
@@ -29,7 +54,9 @@ impl ClipboardDatabase {
         self.conn.execute(
             "CREATE TABLE IF NOT EXISTS clipboard_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                content TEXT NOT NULL,
+                content_type TEXT NOT NULL, -- TEXT, IMAGE
+                image_path TEXT,
+                text_content TEXT,
                 created_at TEXT NOT NULL
             )",
             [],
@@ -45,27 +72,45 @@ impl ClipboardDatabase {
     }
 
     /// Saves a clipboard entry to the database
-    pub fn save_entry(&self, clipboardEvent: ClipboardEvent) -> Result<i64> {
-        self.conn.execute(
-            "INSERT INTO clipboard_history (content, created_at) VALUES (?1, ?2)",
-            [&clipboardEvent.text(), &clipboardEvent.timestamp().to_string().as_str()],
-        )?;
-
+    pub fn save_entry(&self, clipboard_entry: ClipboardEntry) -> Result<i64>
+    {
+        match clipboard_entry.content_type {
+            ContentType::Text => {
+                self.conn.execute(
+                    "INSERT INTO clipboard_history (content_type, text_content, created_at) VALUES (?1, ?2, ?3)",
+                    rusqlite::params!["TEXT", &clipboard_entry.text_content, &clipboard_entry.created_at],
+                )?;
+            }
+            ContentType::Image => {
+                self.conn.execute(
+                    "INSERT INTO clipboard_history (content_type, image_path, created_at) VALUES (?1, ?2, ?3)",
+                    rusqlite::params!["IMAGE", &clipboard_entry.image_path, &clipboard_entry.created_at],
+                )?;
+            }
+        }
         Ok(self.conn.last_insert_rowid())
     }
 
     /// Retrieves all clipboard entries, sorted by most recent first
-    pub fn get_all_entries(&self) -> Result<Vec<ClipboardEvent>> {
+    pub fn get_all_entries(&self) -> Result<Vec<ClipboardEntry>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, content, created_at FROM clipboard_history ORDER BY created_at DESC"
+            "SELECT content_type, text_content, image_path, created_at FROM clipboard_history ORDER BY created_at DESC"
         )?;
 
         let entries = stmt.query_map([], |row| {
-            Ok(ClipboardEvent::from_entry(ClipboardEntry {
-                id: None,
-                content: row.get(1)?,
-                created_at: row.get(2)?,
-            }))
+            let content_type_str: String = row.get(0)?;
+            let content_type = if content_type_str == "TEXT" {
+                ContentType::Text
+            } else {
+                ContentType::Image
+            };
+
+            Ok(ClipboardEntry {
+                content_type,
+                text_content: row.get(1)?,
+                image_path: row.get(2)?,
+                created_at: row.get(3)?,
+            })
         })?;
 
         entries.collect()
@@ -74,14 +119,22 @@ impl ClipboardDatabase {
     /// Retrieves the latest N clipboard entries
     pub fn get_recent_entries(&self, limit: usize) -> Result<Vec<ClipboardEntry>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, content, created_at FROM clipboard_history ORDER BY created_at DESC LIMIT ?1"
+            "SELECT content_type, text_content, image_path, created_at FROM clipboard_history ORDER BY created_at DESC LIMIT ?1"
         )?;
 
         let entries = stmt.query_map([limit], |row| {
+            let content_type_str: String = row.get(0)?;
+            let content_type = if content_type_str == "TEXT" {
+                ContentType::Text
+            } else {
+                ContentType::Image
+            };
+
             Ok(ClipboardEntry {
-                id: Some(row.get(0)?),
-                content: row.get(1)?,
-                created_at: row.get(2)?,
+                content_type,
+                text_content: row.get(1)?,
+                image_path: row.get(2)?,
+                created_at: row.get(3)?,
             })
         })?;
 

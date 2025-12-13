@@ -480,6 +480,7 @@ dependencies = [
 name = "clipboardwatcher"
 version = "0.1.0"
 dependencies = [
+ "base64 0.21.7",
  "chrono",
  "objc2-app-kit",
  "objc2-foundation 0.3.2",

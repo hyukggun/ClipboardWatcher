@@ -18,7 +18,8 @@ impl ClipboardEvent {
     }
 
     pub fn from_entry(entry: ClipboardEntry) -> Self {
-        Self { text: entry.content, timestamp: entry.created_at.parse::<u64>().unwrap() }
+        let text = entry.text_content.unwrap_or_default();
+        Self { text, timestamp: entry.created_at.parse::<u64>().unwrap_or(0) }
     }
 
     pub fn text(&self) -> &str {
@@ -28,4 +29,9 @@ impl ClipboardEvent {
     pub fn timestamp(&self) -> u64 {
         self.timestamp
     }
+}
+
+pub enum ClipboardHistory {
+    Text(String),
+    Image(String),
 }

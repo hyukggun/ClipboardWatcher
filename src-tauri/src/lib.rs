@@ -5,13 +5,13 @@ pub mod db;
 mod model;
 
 use db::{ClipboardDatabase, ClipboardEntry};
-use model::ClipboardEvent;
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State, PhysicalSize, PhysicalPosition};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use base::{get_current_clipboard_count, get_clipboard_text, get_clipboard_image};
 
 // Application state to hold the database connection
 struct AppState {
@@ -19,91 +19,71 @@ struct AppState {
     last_tray_rect: Mutex<Option<tauri::Rect>>,
 }
 
-#[tauri::command]
-fn get_clipboard_text() -> String {
-    base::get_clipboard_text()
-}
-
 fn save_clipboard_event(
     state: State<AppState>,
-    clipboardEvent: ClipboardEvent,
+    clipboard_entry: ClipboardEntry,
 ) -> Result<i64, String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    match db.save_entry(clipboardEvent) {
-        Ok(id) => {
-            println!("Clipboard event saved with id: {:?}", id);
-            Ok(id)
-        }
-        Err(e) => {
-            println!("Error saving clipboard event: {:?}", e);
-            Err(e.to_string())
-        }
-    }
-}
-
-#[tauri::command]
-fn get_recent_clipboard_entries(
-    limit: usize,
-    state: State<AppState>,
-) -> Result<Vec<ClipboardEntry>, String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.get_recent_entries(limit).map_err(|e| e.to_string())
+    let id = db.save_entry(clipboard_entry.clone()).map_err(|e| e.to_string())?;
+    println!("Clipboard entry saved with id: {:?}", id);
+    Ok(id)
 }
 
 #[tauri::command]
 fn delete_clipboard_entry(id: i64, state: State<AppState>) -> Result<(), String> {
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.delete_entry(id).map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn clear_clipboard_history(state: State<AppState>) -> Result<(), String> {
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    db.clear_all().map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-fn load_clipboard_events_at_startup(app_handle: AppHandle) -> Result<(), String> {
-    println!("Loading clipboard events at startup");
-    let state = app_handle.state::<AppState>();
-    let db = state.db.lock().map_err(|e| e.to_string())?;
-    let entries = db.get_all_entries().map_err(|e| e.to_string())?;
-    for entry in entries {
-        println!(
-            "Emitting load_clipboard_events_at_startup event: {:?}",
-            entry
-        );
-        app_handle.emit("clipboard-changed", entry.clone()).unwrap();
-    }
+    let id = db.delete_entry(id).map_err(|e| e.to_string());
+    println!("Clipboard entry deleted with id: {:?}", id);
     Ok(())
 }
 
 #[tauri::command]
-fn hide_window(app_handle: AppHandle) -> Result<(), String> {
-    if let Some(window) = app_handle.get_webview_window("main") {
-        window.hide().map_err(|e| e.to_string())?;
-        Ok(())
-    } else {
-        Err("Main window not found".to_string())
+fn load_clipboard_events_at_startup(state: State<AppState>) -> Result<Vec<ClipboardEntry>, String> {
+    println!("Loading clipboard events at startup");
+    let db = state.db.lock().map_err(|e| e.to_string())?;
+    let entries = db.get_all_entries().map_err(|e| e.to_string())?;
+    println!("Loaded {} entries from database", entries.len());
+    for entry in &entries {
+        println!("  Entry: {:?}", entry);
     }
+    Ok(entries)
+}
+
+#[tauri::command]
+fn hide_window(app_handle: AppHandle) -> Result<(), String> {
+    let window = app_handle.get_webview_window("main").ok_or("Main window not found".to_string())?;
+    window.hide().map_err(|e| e.to_string())?;
+    println!("Window hidden successfully");
+    Ok(())
 }
 
 fn spawn_clipboard_polling_thread(app_handle: AppHandle) -> Result<(), String> {
-    let mut last_event: Option<ClipboardEvent> = None;
+    let mut current_count = 0;
     println!("Spawning clipboard polling thread");
     thread::spawn(move || loop {
-        let text = get_clipboard_text();
-        if let Some(ref last_event) = last_event {
-            if last_event.text() == text {
-                thread::sleep(Duration::from_secs(1));
-                continue;
-            }
+        let new_count = get_current_clipboard_count();
+        if new_count == current_count {
+            thread::sleep(Duration::from_secs(1));
+            continue;
         }
-        last_event = Some(ClipboardEvent::new(text));
-        app_handle
-            .emit("clipboard-changed", last_event.clone().unwrap())
-            .unwrap();
-        save_clipboard_event(app_handle.state::<AppState>(), last_event.clone().unwrap()).unwrap();
+        current_count = new_count.clone();
+
+        let entry = if let Some(text) = get_clipboard_text() {
+            ClipboardEntry::new_text_entry(text)
+        } else if let Some(image_path) = get_clipboard_image(new_count) {
+            ClipboardEntry::new_image_entry(image_path)
+        } else {
+            thread::sleep(Duration::from_secs(1));
+            continue;
+        };
+
+        // 데이터베이스에 저장
+        save_clipboard_event(app_handle.state::<AppState>(), entry.clone()).unwrap();
+
+        println!("Emitting clipboard-changed event: {:?}", entry);
+        // 프론트엔드로 이벤트 emit
+        app_handle.emit("clipboard-changed", entry).unwrap();
+
         thread::sleep(Duration::from_secs(1));
     });
     Ok(())
@@ -129,12 +109,8 @@ pub fn run() {
             last_tray_rect: Mutex::new(None),
         })
         .setup(|app| {
-            println!("Loadindg tray icon..");
-
-            let icon_bytes = include_bytes!("../icons/tray-icon.png");
+            let icon_bytes = include_bytes!("../icons/icon32_32.png");
             let icon = Image::from_bytes(icon_bytes)?;
-            println!("Tray icon loaded successfully");
-
 
             let app_handle = app.handle().clone();
             spawn_clipboard_polling_thread(app_handle.clone())?;
@@ -147,29 +123,14 @@ pub fn run() {
 
             let _tray = TrayIconBuilder::new()
                 .icon(icon)
+                .icon_as_template(true)
                 .menu(&menu)
                 .on_menu_event(|app, event| {
                     match event.id().as_ref() {
                         "open" => {
                             if let Some(window) = app.get_webview_window("main") {
-                                // Use saved tray rect if available
-                                if let Some(state) = app.try_state::<AppState>() {
-                                    if let Ok(last_rect) = state.last_tray_rect.lock() {
-                                        if let Some(rect) = *last_rect {
-                                            let scale_factor = window.scale_factor().unwrap_or(1.0);
-                                            let physical_pos: PhysicalPosition<i32> = rect.position.to_physical(scale_factor);
-                                            let physical_size: PhysicalSize<i32> = rect.size.to_physical(scale_factor);
-
-                                            let window_width = 400;
-                                            let window_x = physical_pos.x + (physical_size.width as i32 / 2) - (window_width / 2);
-                                            let window_y = physical_pos.y + physical_size.height as i32 + 5;
-
-                                            let _ = window.set_position(tauri::Position::Physical(
-                                                tauri::PhysicalPosition { x: window_x, y: window_y }
-                                            ));
-                                        }
-                                    }
-                                }
+                                // Center window on screen
+                                let _ = window.center();
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }
@@ -200,7 +161,7 @@ pub fn run() {
                     }
                 })
                 .on_tray_icon_event(|tray, event| {
-                    println!("Tray icon event: {:?}", event);
+                    // println!("Tray icon event: {:?}", event);
                     if let TrayIconEvent::Click {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Down,
@@ -221,25 +182,8 @@ pub fn run() {
                             if window.is_visible().unwrap_or(false) {
                                 let _ = window.hide();
                             } else {
-                                // Calculate position based on tray icon rect
-                                let scale_factor = window.scale_factor().unwrap_or(1.0);
-                                let physical_pos: PhysicalPosition<i32> = rect.position.to_physical(scale_factor);
-                                let physical_size: PhysicalSize<i32> = rect.size.to_physical(scale_factor);
-
-                                let window_width = 400;
-                                let window_x = physical_pos.x + (physical_size.width as i32 / 2) - (window_width / 2);
-                                let window_y = physical_pos.y + physical_size.height as i32 + 5;
-
-                                println!("=== Tray Icon Position Debug ===");
-                                println!("Scale factor: {}", scale_factor);
-                                println!("Tray position: x={}, y={}",
-                                physical_pos.x, physical_pos.y);
-                                println!("Tray size: width={}, height={}",
-                                physical_size.width, physical_size.height);
-
-                                let _ = window.set_position(tauri::Position::Physical(
-                                    tauri::PhysicalPosition { x: window_x, y: window_y }
-                                ));
+                                // Center window on screen
+                                let _ = window.center();
                                 let _ = window.show();
                                 let _ = window.set_focus();
                             }
@@ -261,10 +205,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             load_clipboard_events_at_startup,
-            get_clipboard_text,
-            get_recent_clipboard_entries,
             delete_clipboard_entry,
-            clear_clipboard_history,
             hide_window
         ])
         .run(tauri::generate_context!())
