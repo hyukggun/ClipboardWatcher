@@ -3,12 +3,13 @@ use tauri::image::Image;
 pub mod base;
 pub mod db;
 mod model;
+mod fzf;
 
 use db::{ClipboardDatabase, ClipboardEntry};
 use std::sync::Mutex;
 use std::thread;
 use std::time::Duration;
-use tauri::{AppHandle, Emitter, Manager, State, PhysicalSize, PhysicalPosition};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use base::{get_current_clipboard_count, get_clipboard_text, get_clipboard_image};
@@ -91,24 +92,26 @@ fn spawn_clipboard_polling_thread(app_handle: AppHandle) -> Result<(), String> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // TODO(human): Configure the database path
-    // The database file will be stored in the app's data directory.
-    // You should decide the best location based on your app's requirements.
-    // Options include:
-    // 1. App data directory: app.path().app_data_dir() - platform-specific app data
-    // 2. App local data: app.path().app_local_data_dir() - local to machine
-    // 3. Custom path: Define your own path
-    // For now, using a default "clipboard_history.db" in current directory
-
-    let db_path = std::path::PathBuf::from("clipboard_history.db");
-    let db = ClipboardDatabase::new(db_path).expect("Failed to initialize database");
-
     tauri::Builder::default()
-        .manage(AppState {
-            db: Mutex::new(db),
-            last_tray_rect: Mutex::new(None),
-        })
         .setup(|app| {
+            // Initialize database in app data directory
+            let app_data_dir = app.path().app_data_dir()
+                .expect("Failed to get app data directory");
+
+            std::fs::create_dir_all(&app_data_dir)
+                .expect("Failed to create app data directory");
+
+            let db_path = app_data_dir.join("clipboard_history.db");
+            println!("Database path: {:?}", db_path);
+
+            let db = ClipboardDatabase::new(db_path)
+                .expect("Failed to initialize database");
+
+            // Create and register AppState
+            app.manage(AppState {
+                db: Mutex::new(db),
+                last_tray_rect: Mutex::new(None),
+            });
             let icon_bytes = include_bytes!("../icons/icon32_32.png");
             let icon = Image::from_bytes(icon_bytes)?;
 

@@ -160,7 +160,6 @@ impl ClipboardDatabase {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
 
     fn create_test_db() -> ClipboardDatabase {
         // Use in-memory database for tests to avoid file permission issues
@@ -188,13 +187,14 @@ mod tests {
 
         // Save an entry
         let content = "Test clipboard content".to_string();
-        let id = db.save_entry(content.clone()).unwrap();
+        let entry = ClipboardEntry::new_text_entry(content.clone());
+        let id = db.save_entry(entry).unwrap();
         assert!(id > 0);
 
         // Retrieve all entries
         let entries = db.get_all_entries().unwrap();
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].content, content);
+        assert_eq!(entries[0].text_content, Some(content));
 
         cleanup_test_db();
     }
@@ -204,18 +204,18 @@ mod tests {
         let db = create_test_db();
 
         // Save multiple entries
-        db.save_entry("First".to_string()).unwrap();
+        db.save_entry(ClipboardEntry::new_text_entry("First".to_string())).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(10));
-        db.save_entry("Second".to_string()).unwrap();
+        db.save_entry(ClipboardEntry::new_text_entry("Second".to_string())).unwrap();
         std::thread::sleep(std::time::Duration::from_millis(10));
-        db.save_entry("Third".to_string()).unwrap();
+        db.save_entry(ClipboardEntry::new_text_entry("Third".to_string())).unwrap();
 
         // Retrieve and check ordering (most recent first)
         let entries = db.get_all_entries().unwrap();
         assert_eq!(entries.len(), 3);
-        assert_eq!(entries[0].content, "Third");
-        assert_eq!(entries[1].content, "Second");
-        assert_eq!(entries[2].content, "First");
+        assert_eq!(entries[0].text_content, Some("Third".to_string()));
+        assert_eq!(entries[1].text_content, Some("Second".to_string()));
+        assert_eq!(entries[2].text_content, Some("First".to_string()));
 
         cleanup_test_db();
     }
@@ -226,7 +226,7 @@ mod tests {
 
         // Save 5 entries
         for i in 1..=5 {
-            db.save_entry(format!("Entry {}", i)).unwrap();
+            db.save_entry(ClipboardEntry::new_text_entry(format!("Entry {}", i))).unwrap();
         }
 
         // Get only 3 most recent
@@ -240,7 +240,7 @@ mod tests {
     fn test_delete_entry() {
         let db = create_test_db();
 
-        let id = db.save_entry("To be deleted".to_string()).unwrap();
+        let id = db.save_entry(ClipboardEntry::new_text_entry("To be deleted".to_string())).unwrap();
         let entries = db.get_all_entries().unwrap();
         assert_eq!(entries.len(), 1);
 
@@ -256,9 +256,9 @@ mod tests {
         let db = create_test_db();
 
         // Add multiple entries
-        db.save_entry("Entry 1".to_string()).unwrap();
-        db.save_entry("Entry 2".to_string()).unwrap();
-        db.save_entry("Entry 3".to_string()).unwrap();
+        db.save_entry(ClipboardEntry::new_text_entry("Entry 1".to_string())).unwrap();
+        db.save_entry(ClipboardEntry::new_text_entry("Entry 2".to_string())).unwrap();
+        db.save_entry(ClipboardEntry::new_text_entry("Entry 3".to_string())).unwrap();
 
         let entries = db.get_all_entries().unwrap();
         assert_eq!(entries.len(), 3);
