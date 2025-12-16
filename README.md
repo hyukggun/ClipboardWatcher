@@ -1,6 +1,27 @@
 # ClipboardWatcher
 
-ClipboardWatcher is a lightweight desktop application built with Tauri v2, React, and TypeScript that monitors your clipboard history and provides an intuitive interface to manage copied text and images.
+> A lightweight macOS desktop application for managing clipboard history
+
+[![Version](https://img.shields.io/badge/version-0.1.0-blue.svg)](https://github.com/hyukggun/ClipboardWatcher)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Tauri](https://img.shields.io/badge/Tauri-v2-orange.svg)](https://tauri.app/)
+[![React](https://img.shields.io/badge/React-19-61dafb.svg)](https://react.dev/)
+
+ClipboardWatcher is a modern desktop application built with Tauri v2, React 19, and TypeScript that automatically monitors your clipboard and provides an intuitive interface to manage copied text and images with fuzzy search capabilities.
+
+## Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/hyukggun/ClipboardWatcher.git
+cd ClipboardWatcher
+
+# Install dependencies
+yarn install
+
+# Run in development mode
+yarn tauri dev
+```
 
 ## Features
 
@@ -19,9 +40,9 @@ ClipboardWatcher is a lightweight desktop application built with Tauri v2, React
 ## Tech Stack
 
 ### Frontend
-- **React 18**: Modern UI library with hooks
-- **TypeScript**: Type-safe development
-- **Vite**: Fast build tool and dev server
+- **React 19**: Latest React with improved hooks and performance
+- **TypeScript 5.6**: Type-safe development with latest features
+- **Vite 6**: Ultra-fast build tool and dev server with HMR
 
 ### Backend
 - **Rust**: High-performance system programming language
@@ -30,7 +51,18 @@ ClipboardWatcher is a lightweight desktop application built with Tauri v2, React
 - **rusqlite**: Rust bindings for SQLite
 
 ### Platform Support
-- macOS (using NSPasteboard API)
+- **macOS**: Full support using NSPasteboard API
+- **Windows/Linux**: Coming soon
+
+### Key Dependencies
+- **rusqlite 0.32**: SQLite database with bundled support
+- **objc2-app-kit 0.3**: Native macOS clipboard integration
+- **chrono 0.4**: Timestamp management
+- **base64 0.21**: Image encoding for storage
+
+## Version
+
+Current version: **0.1.0**
 
 ## Prerequisites
 
@@ -251,11 +283,66 @@ For more detailed troubleshooting guides, see the `docs/` directory.
 
 ## Documentation
 
-Detailed documentation is available in the `docs/` directory:
-- Rust ownership and error handling
-- Tauri event system
-- Debugging duplicate events
-- And more...
+Comprehensive documentation is available in the `docs/` directory:
+
+### Technical Guides
+- **01-rust-ownership-optional-handling.md**: Rust ownership patterns and Option handling
+- **02-rust-references-vs-cpp.md**: Rust references compared to C++ pointers
+- **03-rust-compile-time-safety.md**: Compile-time safety features in Rust
+- **04-thread-spawn-error-hints.md**: Thread spawning and error handling
+
+### Implementation Guides
+- **05-tauri-app-deployment.md**: Application deployment strategies
+- **06-hide-window-command-usage.md**: Window management implementation
+- **07-clipboard-delete-event-handling.md**: Delete event implementation and updates
+- **08-rust-result-type-in-event-payload.md**: Handling Result types in events
+
+### Troubleshooting
+- **09-duplicate-clipboard-event-analysis.md**: Analysis of duplicate event issues
+- **10-duplicate-event-debugging-guide.md**: Step-by-step debugging guide
+- **11-duplicate-card-rendering-fix.md**: Fix for duplicate card rendering with React
+
+## Recent Improvements
+
+### v0.1.0 (Latest)
+- ✅ **Fixed**: Duplicate clipboard entry rendering issue
+- ✅ **Fixed**: React Strict Mode causing double event listeners
+- ✅ **Improved**: Event deduplication with ID checking
+- ✅ **Improved**: React key optimization using unique identifiers
+- ✅ **Added**: Comprehensive debug logging for troubleshooting
+- ✅ **Added**: Delete event emission from backend
+- ✅ **Migrated**: Frontend from Svelte to React 19
+- ✅ **Implemented**: FZF (Fuzzy Finder) algorithm for search
+
+## Known Issues
+
+- Image paste functionality not yet implemented (copy back to clipboard works for text only)
+- Database file location is hardcoded to app data directory
+- No settings UI for customizing poll interval or history size
+- Search only works for text items (images excluded)
+
+## Roadmap
+
+### v0.2.0 (Planned)
+- [ ] Image paste support
+- [ ] Settings panel for configuration
+- [ ] Keyboard shortcuts (global hotkeys)
+- [ ] Dark/Light theme toggle
+- [ ] Export/Import clipboard history
+
+### v0.3.0 (Future)
+- [ ] Windows and Linux support
+- [ ] Cloud sync capabilities
+- [ ] Advanced filtering and tagging
+- [ ] Rich text format support
+- [ ] Multi-language support
+
+## Performance
+
+- **Memory Usage**: ~50-70MB at runtime
+- **Database Size**: ~1KB per text entry, varies for images
+- **Polling Interval**: 1 second (configurable in code)
+- **Startup Time**: < 2 seconds on Apple Silicon Macs
 
 ## Contributing
 
