@@ -1,4 +1,8 @@
 import { ClipboardEntry } from "../types";
+import { FileText, Image as ImageIcon, Copy, Trash2, Clock } from "lucide-react";
+import { Card, CardContent, CardFooter, CardHeader } from "./ui/card";
+import { Button } from "./ui/button";
+import { Badge } from "./ui/badge";
 
 interface ClipboardCardProps {
   item: ClipboardEntry;
@@ -22,51 +26,73 @@ export default function ClipboardCard({ item, onDelete, onPaste }: ClipboardCard
     return date.toLocaleDateString();
   };
 
-  return (
-    <div className="clipboard-card">
-      <div className="card-header">
-        <div className="card-type">
-          {item.isText() ? (
-            <>
-              <span className="type-icon">📝</span>
-              <span className="type-label">Text</span>
-            </>
-          ) : (
-            <>
-              <span className="type-icon">🖼️</span>
-              <span className="type-label">Image</span>
-            </>
-          )}
-        </div>
-        <div className="card-time">{formatTimestamp(item.timestamp)}</div>
-      </div>
+  const isText = item.isText();
+  const isImage = item.isImage();
 
-      <div className="card-content">
-        {item.isText() ? (
-          <div className="text-content">{item.text}</div>
-        ) : item.isImage() ? (
-          <div className="image-content">
-            <img src={item.image} alt="clipboard" className="clipboard-image" />
+  return (
+    <Card className="group transition-all hover:shadow-md">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <Badge variant={isText ? "default" : "secondary"} className="gap-1.5">
+            {isText ? (
+              <>
+                <FileText className="h-3 w-3" />
+                <span>Text</span>
+              </>
+            ) : (
+              <>
+                <ImageIcon className="h-3 w-3" />
+                <span>Image</span>
+              </>
+            )}
+          </Badge>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Clock className="h-3 w-3" />
+            <span>{formatTimestamp(item.timestamp)}</span>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="pb-3">
+        {isText ? (
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="max-h-[200px] overflow-y-auto whitespace-pre-wrap break-words text-sm">
+              {item.text}
+            </p>
+          </div>
+        ) : isImage ? (
+          <div className="flex justify-center rounded-md bg-muted/50 p-3">
+            <img
+              src={item.image}
+              alt="clipboard"
+              className="max-h-[300px] rounded-md object-contain"
+            />
           </div>
         ) : null}
-      </div>
+      </CardContent>
 
-      <div className="card-actions">
-        <button
-          className="action-btn paste-btn"
+      <CardFooter className="gap-2 pt-0">
+        <Button
+          variant="outline"
+          size="sm"
+          className="flex-1 gap-2"
           onClick={() => onPaste(item)}
           title="Paste to clipboard"
         >
-          <span>📋</span> Paste
-        </button>
-        <button
-          className="action-btn delete-btn"
+          <Copy className="h-4 w-4" />
+          <span>Paste</span>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2 hover:bg-destructive hover:text-destructive-foreground"
           onClick={() => onDelete(item)}
           title="Delete"
         >
-          <span>🗑️</span> Delete
-        </button>
-      </div>
-    </div>
+          <Trash2 className="h-4 w-4" />
+          <span>Delete</span>
+        </Button>
+      </CardFooter>
+    </Card>
   );
 }

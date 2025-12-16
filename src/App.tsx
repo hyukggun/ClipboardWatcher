@@ -1,57 +1,45 @@
 import { useState, useEffect, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { X, Trash2, Search } from "lucide-react";
 import { ClipboardEntry, ClipboardEntryData } from "./types";
 import Sidebar from "./components/Sidebar";
 import ClipboardCard from "./components/ClipboardCard";
+import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
 
 function App() {
   const [clipboardEvents, setClipboardEvents] = useState<ClipboardEntry[]>([]);
-  const [sidebarExpanded, setSidebarExpanded] = useState(true);
   const [activeCategory, setActiveCategory] = useState<"all" | "text" | "images">("all");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // 카테고리별 카운트 계산
   const textCount = useMemo(() => clipboardEvents.filter((e) => e.isText()).length, [clipboardEvents]);
   const imageCount = useMemo(() => clipboardEvents.filter((e) => e.isImage()).length, [clipboardEvents]);
 
-  // 필터링된 이벤트
   const filteredEvents = useMemo(() => {
-    console.log("[FILTER] Active category:", activeCategory);
-    console.log("[FILTER] Total events:", clipboardEvents.length);
-
     let filtered: ClipboardEntry[];
     if (activeCategory === "text") {
       filtered = clipboardEvents.filter((e) => e.isText());
-      console.log("[FILTER] Text events:", filtered.length);
     } else if (activeCategory === "images") {
       filtered = clipboardEvents.filter((e) => e.isImage());
-      console.log("[FILTER] Image events:", filtered.length);
     } else {
       filtered = clipboardEvents;
-      console.log("[FILTER] All events:", filtered.length);
     }
 
     return filtered;
   }, [clipboardEvents, activeCategory]);
 
   useEffect(() => {
-    console.log("[INIT] ========================================");
     console.log("[INIT] React App mounting at:", new Date().toISOString());
 
-    // Tauri 컨텍스트 확인
     if (typeof (window as any).__TAURI_INTERNALS__ === "undefined") {
       console.error("[ERROR] ⚠️ NOT RUNNING IN TAURI CONTEXT ⚠️");
       return;
     }
 
-    console.log("[MOUNT] ✓ Tauri context confirmed");
-
-    // 각 리스너의 cleanup 함수를 별도로 저장
     let unlistenClipboardChanged: any;
     let unlistenClipboardDeleted: any;
 
-    // clipboard-changed 리스너
     const listenerInstanceId = Math.random().toString(36).substring(7);
     console.log("[MOUNT] Registering clipboard-changed listener:", listenerInstanceId);
 
@@ -59,7 +47,6 @@ function App() {
       console.log(`[EVENT-${listenerInstanceId}] clipboard-changed received:`, event.payload);
       const entry = new ClipboardEntry(event.payload);
       setClipboardEvents((prev) => {
-        // 중복 체크: 같은 ID가 이미 존재하면 추가하지 않음
         const isDuplicate = prev.some((e) => e.id === entry.id);
         if (isDuplicate) {
           console.log(`[EVENT-${listenerInstanceId}] Duplicate entry detected (id: ${entry.id}), skipping`);
@@ -73,7 +60,6 @@ function App() {
       console.log("[MOUNT] ✓ clipboard-changed listener registered:", listenerInstanceId);
     });
 
-    // clipboard-deleted 리스너
     listen<number>("clipboard-deleted", (event) => {
       console.log("[EVENT] clipboard-deleted received:", event.payload);
       setClipboardEvents((prev) => prev.filter((e) => e.id !== event.payload));
@@ -82,7 +68,6 @@ function App() {
       console.log("[MOUNT] ✓ clipboard-deleted listener registered");
     });
 
-    // 초기 데이터 로드
     invoke<ClipboardEntryData[]>("load_clipboard_events_at_startup")
       .then((entries) => {
         console.log("[MOUNT] Loaded entries:", entries);
@@ -94,7 +79,6 @@ function App() {
         console.error("[ERROR] Failed to load initial data:", error);
       });
 
-    // cleanup: 모든 리스너 제거
     return () => {
       if (unlistenClipboardChanged) {
         unlistenClipboardChanged();
@@ -109,9 +93,7 @@ function App() {
 
   const handleDelete = async (item: ClipboardEntry) => {
     console.log("[DELETE] Deleting item:", item);
-    // 프론트엔드에서 즉시 제거
-    setClipboardEvents((prev) => prev.filter((e) => e.timestamp !== item.timestamp));
-    // TODO: 백엔드 delete_clipboard_entry 호출
+    setClipboardEvents((prev) => prev.filter((e) => e.id !== item.id));
     invoke("delete_clipboard_entry", { id: item.id });
   };
 
@@ -121,7 +103,6 @@ function App() {
         await navigator.clipboard.writeText(item.text);
         console.log("[PASTE] Pasted text:", item.text);
       } else if (item.isImage()) {
-        // TODO: 이미지 paste 구현
         console.log("[PASTE] Image paste not yet implemented");
       }
     } catch (error) {
@@ -148,61 +129,76 @@ function App() {
   };
 
   return (
-    <div className={`app-container ${sidebarExpanded ? "" : "sidebar-collapsed"}`}>
+    <div className="flex h-screen overflow-hidden bg-background">
       <Sidebar
         totalCount={clipboardEvents.length}
         textCount={textCount}
         imageCount={imageCount}
         onCategoryChange={setActiveCategory}
-        onToggle={setSidebarExpanded}
+        onToggle={() => {}}
       />
 
-      <main className="main-content">
-        <header className="content-header">
-          <h2 className="content-title">
+      <main className="flex flex-1 flex-col overflow-hidden">
+        {/* Header */}
+        <header className="flex items-center justify-between border-b px-4 py-3">
+          <h2 className="text-lg font-semibold">
             {activeCategory === "all" ? "Clipboard History" : activeCategory === "text" ? "Text Items" : "Images"}
           </h2>
-          <div className="header-actions">
-            <button className="header-button" onClick={handleClearAll} title="Clear All">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={handleClearAll} className="gap-2">
+              <Trash2 className="h-4 w-4" />
               Clear All
-            </button>
-            <button className="close-button" onClick={handleCloseWindow} title="Close window">
-              ✕
-            </button>
+            </Button>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleCloseWindow} title="Close window">
+              <X className="h-4 w-4" />
+            </Button>
           </div>
         </header>
 
+        {/* Search Bar */}
         {activeCategory === "text" && (
-          <div className="search-bar">
-            <input
-              type="text"
-              className="search-input"
-              placeholder="Search text items..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
-            {searchQuery && (
-              <button className="search-clear" onClick={() => setSearchQuery("")} title="Clear search">
-                ✕
-              </button>
-            )}
+          <div className="border-b px-4 py-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="Search text items..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-9 pr-9"
+              />
+              {searchQuery && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1/2 h-7 w-7 -translate-y-1/2"
+                  onClick={() => setSearchQuery("")}
+                  title="Clear search"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
           </div>
         )}
 
-        <div className="content-body">
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4">
           {filteredEvents.length === 0 ? (
-            <div className="empty-state">
-              <p className="empty-text">
+            <div className="flex h-full flex-col items-center justify-center text-center">
+              <p className="text-base font-medium text-foreground">
                 {activeCategory === "all"
                   ? "Your clipboard history is empty."
                   : activeCategory === "text"
                   ? "No text items yet."
                   : "No images yet."}
               </p>
-              <p className="empty-hint">Copy some {activeCategory === "all" ? "text or images" : activeCategory} to get started!</p>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Copy some {activeCategory === "all" ? "text or images" : activeCategory} to get started!
+              </p>
             </div>
           ) : (
-            <div className="clipboard-list">
+            <div className="space-y-3">
               {filteredEvents.map((item) => (
                 <ClipboardCard key={`${item.id}-${item.timestamp}`} item={item} onDelete={handleDelete} onPaste={handlePaste} />
               ))}
