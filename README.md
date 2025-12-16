@@ -1,7 +1,7 @@
-# Tauri + SvelteKit + TypeScript
+# Tauri + React + TypeScript
 
-This template should help get you started developing with Tauri, SvelteKit and TypeScript in Vite.
+ClipboardWatcher is a desktop application built with Tauri v2, React, and TypeScript. It monitors your clipboard history and provides an intuitive interface to manage copied text and images.
 
 ## Recommended IDE Setup
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).
+[VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).

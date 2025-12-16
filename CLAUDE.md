@@ -68,3 +68,4 @@ cargo check
 - `src-tauri/Cargo.toml` - Rust dependencies and library configuration
 - `vite.config.js` - Vite configuration with Tauri-specific settings
 - `svelte.config.js` - SvelteKit adapter configuration for SPA mode
+- 힌트나 개선 방향을 제시하고, 사용자의 요청이 아니면 직접 전부를 작성해지마.

@@ -1,6 +1,7 @@
 export type ContentType = "Text" | "Image";
 
 export interface ClipboardEntryData {
+  id: number | null;
   content_type: ContentType;
   text_content: string | null;
   image_path: string | null;
@@ -8,12 +9,14 @@ export interface ClipboardEntryData {
 }
 
 export class ClipboardEntry {
+  id: number | null;
   content_type: ContentType;
   text_content: string | null;
   image_path: string | null;
   created_at: string;
 
   constructor(data: ClipboardEntryData) {
+    this.id = data.id;
     this.content_type = data.content_type;
     this.text_content = data.text_content;
     this.image_path = data.image_path;

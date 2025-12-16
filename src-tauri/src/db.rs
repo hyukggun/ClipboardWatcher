@@ -10,6 +10,7 @@ enum ContentType {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClipboardEntry {
+    pub id: Option<i64>,
     pub content_type: ContentType,
     pub image_path: Option<String>,
     pub text_content: Option<String>,
@@ -19,6 +20,7 @@ pub struct ClipboardEntry {
 impl ClipboardEntry {
     pub fn new_text_entry(text: String) -> Self {
         Self {
+            id: None,
             content_type: ContentType::Text,
             text_content: Some(text),
             image_path: None,
@@ -28,6 +30,7 @@ impl ClipboardEntry {
 
     pub fn new_image_entry(image_path: String) -> Self {
         Self {
+            id: None,
             content_type: ContentType::Image,
             image_path: Some(image_path),
             text_content: None,
@@ -94,11 +97,12 @@ impl ClipboardDatabase {
     /// Retrieves all clipboard entries, sorted by most recent first
     pub fn get_all_entries(&self) -> Result<Vec<ClipboardEntry>> {
         let mut stmt = self.conn.prepare(
-            "SELECT content_type, text_content, image_path, created_at FROM clipboard_history ORDER BY created_at DESC"
+            "SELECT id, content_type, text_content, image_path, created_at FROM clipboard_history ORDER BY created_at DESC"
         )?;
 
         let entries = stmt.query_map([], |row| {
-            let content_type_str: String = row.get(0)?;
+            let id: i64 = row.get(0)?;
+            let content_type_str: String = row.get(1)?;
             let content_type = if content_type_str == "TEXT" {
                 ContentType::Text
             } else {
@@ -106,10 +110,11 @@ impl ClipboardDatabase {
             };
 
             Ok(ClipboardEntry {
+                id: Some(id),
                 content_type,
-                text_content: row.get(1)?,
-                image_path: row.get(2)?,
-                created_at: row.get(3)?,
+                text_content: row.get(2)?,
+                image_path: row.get(3)?,
+                created_at: row.get(4)?,
             })
         })?;
 
@@ -119,7 +124,7 @@ impl ClipboardDatabase {
     /// Retrieves the latest N clipboard entries
     pub fn get_recent_entries(&self, limit: usize) -> Result<Vec<ClipboardEntry>> {
         let mut stmt = self.conn.prepare(
-            "SELECT content_type, text_content, image_path, created_at FROM clipboard_history ORDER BY created_at DESC LIMIT ?1"
+            "SELECT id, content_type, text_content, image_path, created_at FROM clipboard_history ORDER BY created_at DESC LIMIT ?1"
         )?;
 
         let entries = stmt.query_map([limit], |row| {
@@ -131,6 +136,7 @@ impl ClipboardDatabase {
             };
 
             Ok(ClipboardEntry {
+                id: row.get(0)?,
                 content_type,
                 text_content: row.get(1)?,
                 image_path: row.get(2)?,
@@ -142,12 +148,14 @@ impl ClipboardDatabase {
     }
 
     /// Deletes an entry by ID
-    pub fn delete_entry(&self, id: i64) -> Result<()> {
-        self.conn.execute(
+    pub fn delete_entry(&self, id: i64) -> Result<i64> {
+        match self.conn.execute(
             "DELETE FROM clipboard_history WHERE id = ?1",
             [id],
-        )?;
-        Ok(())
+        ) {
+            Ok(_) => Ok(id),
+            Err(e) => Err(e),
+        }
     }
 
     /// Clears all clipboard history

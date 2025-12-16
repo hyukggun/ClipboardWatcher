@@ -47,15 +47,39 @@ function App() {
 
     console.log("[MOUNT] ✓ Tauri context confirmed");
 
-    // 이벤트 리스너 등록
-    let unlisten: any;
+    // 각 리스너의 cleanup 함수를 별도로 저장
+    let unlistenClipboardChanged: any;
+    let unlistenClipboardDeleted: any;
+
+    // clipboard-changed 리스너
+    const listenerInstanceId = Math.random().toString(36).substring(7);
+    console.log("[MOUNT] Registering clipboard-changed listener:", listenerInstanceId);
+
     listen<ClipboardEntryData>("clipboard-changed", (event) => {
-      console.log("[EVENT] clipboard-changed received:", event.payload);
+      console.log(`[EVENT-${listenerInstanceId}] clipboard-changed received:`, event.payload);
       const entry = new ClipboardEntry(event.payload);
-      setClipboardEvents((prev) => [entry, ...prev]);
+      setClipboardEvents((prev) => {
+        // 중복 체크: 같은 ID가 이미 존재하면 추가하지 않음
+        const isDuplicate = prev.some((e) => e.id === entry.id);
+        if (isDuplicate) {
+          console.log(`[EVENT-${listenerInstanceId}] Duplicate entry detected (id: ${entry.id}), skipping`);
+          return prev;
+        }
+        console.log(`[EVENT-${listenerInstanceId}] Adding entry (id: ${entry.id}), current count:`, prev.length);
+        return [entry, ...prev];
+      });
     }).then((fn) => {
-      unlisten = fn;
-      console.log("[MOUNT] ✓ Event listener registered");
+      unlistenClipboardChanged = fn;
+      console.log("[MOUNT] ✓ clipboard-changed listener registered:", listenerInstanceId);
+    });
+
+    // clipboard-deleted 리스너
+    listen<number>("clipboard-deleted", (event) => {
+      console.log("[EVENT] clipboard-deleted received:", event.payload);
+      setClipboardEvents((prev) => prev.filter((e) => e.id !== event.payload));
+    }).then((fn) => {
+      unlistenClipboardDeleted = fn;
+      console.log("[MOUNT] ✓ clipboard-deleted listener registered");
     });
 
     // 초기 데이터 로드
@@ -70,8 +94,16 @@ function App() {
         console.error("[ERROR] Failed to load initial data:", error);
       });
 
+    // cleanup: 모든 리스너 제거
     return () => {
-      if (unlisten) unlisten();
+      if (unlistenClipboardChanged) {
+        unlistenClipboardChanged();
+        console.log("[CLEANUP] clipboard-changed listener removed");
+      }
+      if (unlistenClipboardDeleted) {
+        unlistenClipboardDeleted();
+        console.log("[CLEANUP] clipboard-deleted listener removed");
+      }
     };
   }, []);
 
@@ -80,6 +112,7 @@ function App() {
     // 프론트엔드에서 즉시 제거
     setClipboardEvents((prev) => prev.filter((e) => e.timestamp !== item.timestamp));
     // TODO: 백엔드 delete_clipboard_entry 호출
+    invoke("delete_clipboard_entry", { id: item.id });
   };
 
   const handlePaste = async (item: ClipboardEntry) => {
@@ -170,8 +203,8 @@ function App() {
             </div>
           ) : (
             <div className="clipboard-list">
-              {filteredEvents.map((item, index) => (
-                <ClipboardCard key={index} item={item} onDelete={handleDelete} onPaste={handlePaste} />
+              {filteredEvents.map((item) => (
+                <ClipboardCard key={`${item.id}-${item.timestamp}`} item={item} onDelete={handleDelete} onPaste={handlePaste} />
               ))}
             </div>
           )}

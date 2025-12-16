@@ -31,11 +31,13 @@ fn save_clipboard_event(
 }
 
 #[tauri::command]
-fn delete_clipboard_entry(id: i64, state: State<AppState>) -> Result<(), String> {
+fn delete_clipboard_entry(id: i64, state: State<AppState>, app_handle: AppHandle) -> Result<i64, String> {
+    println!("Deleting clipboard entry with id: {:?}", id);
     let db = state.db.lock().map_err(|e| e.to_string())?;
-    let id = db.delete_entry(id).map_err(|e| e.to_string());
+    let deleted_id = db.delete_entry(id).map_err(|e| e.to_string())?;
     println!("Clipboard entry deleted with id: {:?}", id);
-    Ok(())
+    app_handle.emit("clipboard-deleted", deleted_id).map_err(|e| e.to_string())?;
+    Ok(deleted_id)
 }
 
 #[tauri::command]
@@ -60,28 +62,42 @@ fn hide_window(app_handle: AppHandle) -> Result<(), String> {
 
 fn spawn_clipboard_polling_thread(app_handle: AppHandle) -> Result<(), String> {
     let mut current_count = 0;
-    println!("Spawning clipboard polling thread");
+    println!("[POLLING] Spawning clipboard polling thread");
     thread::spawn(move || loop {
         let new_count = get_current_clipboard_count();
+
         if new_count == current_count {
             thread::sleep(Duration::from_secs(1));
             continue;
         }
+
+        println!("[POLLING] Clipboard count changed: {} -> {}", current_count, new_count);
         current_count = new_count.clone();
 
-        let entry = if let Some(text) = get_clipboard_text() {
+        let mut entry = if let Some(text) = get_clipboard_text() {
+            println!("[POLLING] Detected text entry");
             ClipboardEntry::new_text_entry(text)
         } else if let Some(image_path) = get_clipboard_image(new_count) {
+            println!("[POLLING] Detected image entry");
             ClipboardEntry::new_image_entry(image_path)
         } else {
+            println!("[POLLING] No text or image detected, skipping");
             thread::sleep(Duration::from_secs(1));
             continue;
         };
 
-        // 데이터베이스에 저장
-        save_clipboard_event(app_handle.state::<AppState>(), entry.clone()).unwrap();
 
-        println!("Emitting clipboard-changed event: {:?}", entry);
+        match save_clipboard_event(app_handle.state::<AppState>(), entry.clone()) {
+            Ok(id) => {
+                println!("[POLLING] Entry saved with id: {}", id);
+                entry.id = Some(id);
+            }
+            Err(e) => {
+                println!("[POLLING] Error saving clipboard event: {:?}", e);
+            }
+        }
+
+        println!("[POLLING] Emitting clipboard-changed event with id: {:?}", entry.id);
         // 프론트엔드로 이벤트 emit
         app_handle.emit("clipboard-changed", entry).unwrap();
 
